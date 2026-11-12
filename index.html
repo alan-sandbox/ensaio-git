@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loja Virtual — Gestão de Produtos</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --danger: #dc2626;
+      --success: #16a34a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: 0.875rem;
+    }
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      background: #e2e8f0;
+      color: var(--muted);
+    }
+    .badge.ok {
+      background: #dcfce7;
+      color: var(--success);
+    }
+    .badge.err {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+    main {
+      max-width: 960px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 2rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .login-card {
+      max-width: 420px;
+      margin: 3rem auto;
+    }
+    h1, h2 {
+      margin-bottom: 0.5rem;
+    }
+    p.subtitle {
+      color: var(--muted);
+      font-size: 0.925rem;
+      margin-bottom: 1.5rem;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 0.375rem;
+    }
+    input {
+      width: 100%;
+      padding: 0.625rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 0.95rem;
+    }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 0.5rem;
+      padding: 0.65rem 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: var(--primary);
+      color: #fff;
+      transition: background 0.15s;
+    }
+    button:hover {
+      background: var(--primary-hover);
+    }
+    button.secondary {
+      background: #e2e8f0;
+      color: var(--text);
+    }
+    .btn-block {
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+    .alert {
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .alert.error {
+      display: block;
+      background: #fee2e2;
+      color: var(--danger);
+      border: 1px solid #fecaca;
+    }
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">🛒 Loja Virtual — CRUD Produtos</div>
+    <div class="status-bar">
+      <span id="health-badge" class="badge">Verificando API...</span>
+      <span id="user-info" class="hidden"></span>
+      <button id="logout-btn" class="secondary hidden" type="button">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Tela de Login (Issue #1) -->
+    <section id="login-section" class="card login-card">
+      <h1>Acesso Restrito</h1>
+      <p class="subtitle">Entre com suas credenciais para gerenciar o catálogo de produtos.</p>
+      <div id="login-error" class="alert" role="alert"></div>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="username">Usuário</label>
+          <input id="username" name="username" type="text" required autocomplete="username" placeholder="Ex.: admin" />
+        </div>
+        <div class="form-group">
+          <label for="password">Senha</label>
+          <input id="password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <button type="submit" class="btn-block">Entrar</button>
+      </form>
+    </section>
+
+    <!-- Painel Principal Autenticado -->
+    <section id="app-section" class="card hidden">
+      <h2>Painel de Produtos</h2>
+      <p class="subtitle">Sessão autenticada ativa. Utilize os módulos abaixo para gerenciar os registros.</p>
+      <div id="modules-container">
+        <p>Estrutura Web inicializada com sucesso.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const TOKEN_KEY = "loja_web_token";
+    const USER_KEY = "loja_web_user";
+
+    const healthBadge = document.getElementById("health-badge");
+    const loginSection = document.getElementById("login-section");
+    const appSection = document.getElementById("app-section");
+    const loginForm = document.getElementById("login-form");
+    const loginError = document.getElementById("login-error");
+    const userInfo = document.getElementById("user-info");
+    const logoutBtn = document.getElementById("logout-btn");
+
+    async function checkHealth() {
+      try {
+        const res = await fetch("/api/web/health");
+        if (res.ok) {
+          healthBadge.textContent = "API Online";
+          healthBadge.className = "badge ok";
+        } else {
+          healthBadge.textContent = "API Indisponível";
+          healthBadge.className = "badge err";
+        }
+      } catch (_err) {
+        healthBadge.textContent = "API Offline";
+        healthBadge.className = "badge err";
+      }
+    }
+
+    function updateAuthUI() {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      const username = sessionStorage.getItem(USER_KEY);
+      if (token && username) {
+        loginSection.classList.add("hidden");
+        appSection.classList.remove("hidden");
+        userInfo.textContent = `Olá, ${username}`;
+        userInfo.classList.remove("hidden");
+        logoutBtn.classList.remove("hidden");
+      } else {
+        loginSection.classList.remove("hidden");
+        appSection.classList.add("hidden");
+        userInfo.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+      }
+    }
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      loginError.className = "alert";
+      loginError.textContent = "";
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+
+      try {
+        const res = await fetch("/api/web/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        if (!res.ok) {
+          loginError.textContent = "Usuário ou senha inválidos (HTTP 401).";
+          loginError.className = "alert error";
+          return;
+        }
+
+        const data = await res.json();
+        sessionStorage.setItem(TOKEN_KEY, data.token);
+        sessionStorage.setItem(USER_KEY, data.username);
+        loginForm.reset();
+        updateAuthUI();
+      } catch (_err) {
+        loginError.textContent = "Erro de conexão ao tentar autenticar.";
+        loginError.className = "alert error";
+      }
+    });
+
+    logoutBtn.addEventListener("click", () => {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(USER_KEY);
+      updateAuthUI();
+    });
+
+    checkHealth();
+    updateAuthUI();
+  </script>
+</body>
+</html>
