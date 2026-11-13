@@ -1,15 +1,19 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from decimal import Decimal
 import hashlib
 import hmac
 import json
 import os
 from pathlib import Path
+from typing import Literal
 import uuid
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field, StrictInt, field_validator
 
 import db
 
@@ -17,6 +21,22 @@ import db
 class LoginPayload(BaseModel):
     username: str
     password: str
+
+
+class ProductPayload(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    category: Literal["Eletronicos", "Perifericos", "Moveis", "Vestuario", "Outros"]
+    price: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    stock: StrictInt = Field(ge=0, le=2_147_483_647)
+    description: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("O nome deve ter pelo menos 2 caracteres")
+        return normalized
 
 
 def new_request_id() -> str:
@@ -104,6 +124,24 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Loja Virtual — CRUD Produtos", lifespan=lifespan)
 
 
+@app.exception_handler(RequestValidationError)
+async def log_validation_error(request: Request, exc: RequestValidationError):
+    req_id = new_request_id()
+    client = request.url.path.split("/")[2]
+    log_api(
+        client=client,
+        operation="validation",
+        status="error",
+        request_id=req_id,
+        message="Dados da requisicao invalidos",
+        level="WARN",
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(exc.errors())},
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
     html_path = Path(__file__).with_name("index.html")
@@ -149,3 +187,66 @@ def web_login(payload: LoginPayload):
         message="Login Web realizado com sucesso",
     )
     return {"status": "ok", "token": token, "username": payload.username}
+
+
+@app.post("/api/web/records", status_code=201)
+def web_create_product(
+    payload: ProductPayload,
+    authorization: str | None = Header(default=None),
+):
+    req_id = new_request_id()
+    verify_web_token(authorization, request_id=req_id)
+    product = db.web_create_product(
+        name=payload.name,
+        category=payload.category,
+        price=payload.price,
+        stock=payload.stock,
+        description=payload.description,
+        request_id=req_id,
+    )
+    log_api(
+        client="web",
+        operation="create",
+        status="success",
+        request_id=req_id,
+        message="Produto criado",
+    )
+    return {"status": "ok", "product": product}
+
+
+@app.put("/api/web/records/{product_id}")
+def web_update_product(
+    product_id: int,
+    payload: ProductPayload,
+    authorization: str | None = Header(default=None),
+):
+    req_id = new_request_id()
+    verify_web_token(authorization, request_id=req_id)
+    product = db.web_update_product(
+        product_id=product_id,
+        name=payload.name,
+        category=payload.category,
+        price=payload.price,
+        stock=payload.stock,
+        description=payload.description,
+        request_id=req_id,
+    )
+    if product is None:
+        log_api(
+            client="web",
+            operation="update",
+            status="error",
+            request_id=req_id,
+            message="Produto nao encontrado",
+            level="WARN",
+        )
+        raise HTTPException(status_code=404, detail="Produto nao encontrado")
+
+    log_api(
+        client="web",
+        operation="update",
+        status="success",
+        request_id=req_id,
+        message="Produto atualizado",
+    )
+    return {"status": "ok", "product": product}
