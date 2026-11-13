@@ -125,6 +125,26 @@ def web_authenticate_user(username: str, password: str, request_id: str) -> bool
     return False
 
 
+SORT_COLUMNS = {
+    "id": "id",
+    "name": "name",
+    "category": "category",
+    "price": "price",
+    "stock": "stock",
+}
+
+
+def _row_to_product(row: tuple) -> dict:
+    return {
+        "id": row[0],
+        "name": row[1],
+        "category": row[2],
+        "price": float(row[3]),
+        "stock": row[4],
+        "description": row[5],
+    }
+
+
 def web_create_product(
     name: str,
     category: str,
@@ -149,14 +169,7 @@ def web_create_product(
     finally:
         conn.close()
 
-    product = {
-        "id": row[0],
-        "name": row[1],
-        "category": row[2],
-        "price": float(row[3]),
-        "stock": row[4],
-        "description": row[5],
-    }
+    product = _row_to_product(row)
     log_db(
         client="web",
         operation="insert",
@@ -205,14 +218,7 @@ def web_update_product(
         )
         return None
 
-    product = {
-        "id": row[0],
-        "name": row[1],
-        "category": row[2],
-        "price": float(row[3]),
-        "stock": row[4],
-        "description": row[5],
-    }
+    product = _row_to_product(row)
     log_db(
         client="web",
         operation="update",
@@ -221,3 +227,81 @@ def web_update_product(
         message="Produto atualizado",
     )
     return product
+
+
+def web_list_products(
+    page: int,
+    page_size: int,
+    sort_by: str,
+    order: str,
+    request_id: str,
+) -> dict:
+    sort_column = SORT_COLUMNS[sort_by]
+    sort_direction = "ASC" if order.lower() == "asc" else "DESC"
+    offset = (page - 1) * page_size
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM products;")
+            total = cur.fetchone()[0]
+            cur.execute(
+                f"""
+                SELECT id, name, category, price, stock, description
+                FROM products
+                ORDER BY {sort_column} {sort_direction}, id ASC
+                LIMIT %s OFFSET %s;
+                """,
+                (page_size, offset),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    items = [_row_to_product(row) for row in rows]
+    log_db(
+        client="web",
+        operation="list",
+        status="success",
+        request_id=request_id,
+        message="Produtos listados do banco",
+    )
+    return {"items": items, "total": total}
+
+
+def web_delete_product(product_id: int, request_id: str) -> bool:
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM products
+                WHERE id = %s
+                RETURNING id;
+                """,
+                (product_id,),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+
+    if row is None:
+        log_db(
+            client="web",
+            operation="delete",
+            status="error",
+            request_id=request_id,
+            message="Produto nao encontrado",
+            level="WARN",
+        )
+        return False
+
+    log_db(
+        client="web",
+        operation="delete",
+        status="success",
+        request_id=request_id,
+        message="Produto removido",
+    )
+    return True
