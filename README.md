@@ -85,3 +85,53 @@ Os testes da entrega continuam usando a cobertura integral de `api.py` e `db.py`
 ```bash
 docker compose run --rm api pytest --cov=api --cov=db --cov-report=term-missing --cov-fail-under=100
 ```
+
+---
+
+## Issue #3 — Listagem, Paginação, Ordenação e Exclusão Web de Produtos
+
+### 1. Tabela, Paginação, Ordenação e Exclusão na Interface Web
+
+Ao acessar a interface Web já autenticado ou logo após o login, o **Painel de Produtos** carrega automaticamente a tabela **Produtos Cadastrados** e a mantém sincronizada após cada cadastro, edição ou exclusão:
+
+- **Colunas exibidas:** `ID` (`id`), `Nome` (`name`), `Categoria` (`category`), `Preço` (`price`), `Estoque` (`stock`) e `Ações` (**Selecionar**).
+- **Paginação fixa:** exibe **5 itens por página** (`page` a partir de `1` e `page_size=5` fixo), com botões **Anterior** e **Próxima** e indicador da página atual e total de registros.
+- **Ordenação:** selecione o campo em **Ordenar por** (`id`, `name`, `category`, `price`, `stock`) e a direção (`asc` ou `desc`), ou clique diretamente nos cabeçalhos ordenáveis da tabela.
+- **Seleção e exclusão imediata:** clicar em uma linha da tabela (ou no botão **Selecionar**) destaca o item e preenche os campos do formulário `#product-form` (incluindo descrição) para edição ou exclusão via botão **Excluir selecionado**. Caso a última linha de uma página posterior à primeira seja removida, a interface recua automaticamente para a página anterior.
+
+### 2. Endpoints de Listagem e Exclusão Web
+
+Todas as rotas exigem o cabeçalho `Authorization: Bearer <token>` obtido em `POST /api/web/login`:
+
+- **`GET /api/web/records`**
+  - **Parâmetros de query:**
+    - `page` (inteiro `>= 1`, padrão `1`)
+    - `page_size` (inteiro fixo `= 5`, padrão `5`)
+    - `sort_by` (`id`, `name`, `category`, `price` ou `stock`, padrão `id`)
+    - `order` (`asc` ou `desc`, padrão `asc`)
+  - **Respostas HTTP:**
+    - **200:** retorna `{"status": "ok", "items": [...], "total": <int>, "page": <int>, "page_size": 5, "sort_by": "...", "order": "..."}`.
+    - **401:** token ausente, malformado ou inválido.
+    - **422:** parâmetros de paginação ou ordenação inválidos.
+
+- **`DELETE /api/web/records/{id}`**
+  - **Parâmetro de rota:** `id` (inteiro do produto).
+  - **Respostas HTTP:**
+    - **200:** produto removido imediatamente no banco, retornando `{"status": "ok", "deleted_id": <id>}`.
+    - **401:** token ausente, malformado ou inválido.
+    - **404:** produto não encontrado.
+    - **422:** identificador de rota inválido.
+
+### 3. Logs Correlacionados e Testes com 100% de Cobertura
+
+As requisições de listagem e exclusão emitem logs JSON correlacionados pelo mesmo `request_id` nas camadas `api` e `db`. Consulte os logs em tempo real com:
+
+```bash
+docker compose logs -f api
+```
+
+Execute a suíte de testes unitários verificando 100% de cobertura em `api.py` e `db.py` com:
+
+```bash
+docker compose run --rm api pytest --cov=api --cov=db --cov-report=term-missing --cov-fail-under=100
+```

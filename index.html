@@ -122,9 +122,27 @@
     button:hover {
       background: var(--primary-hover);
     }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     button.secondary {
       background: #e2e8f0;
       color: var(--text);
+    }
+    button.secondary:hover:not(:disabled) {
+      background: #cbd5e1;
+    }
+    button.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+    button.danger:hover:not(:disabled) {
+      background: #b91c1c;
+    }
+    .btn-sm {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.825rem;
     }
     .btn-block {
       width: 100%;
@@ -137,11 +155,97 @@
     }
     .form-actions button {
       flex: 1;
+      min-width: 150px;
     }
     .form-note {
       color: var(--muted);
       font-size: 0.875rem;
       margin: 0.5rem 0 1rem;
+    }
+    .table-section {
+      margin-top: 2rem;
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: end;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .sort-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: end;
+    }
+    .sort-controls .form-group {
+      margin-bottom: 0;
+      min-width: 160px;
+    }
+    .table-wrapper {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.925rem;
+    }
+    th, td {
+      padding: 0.75rem 0.875rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    thead th {
+      background: #f1f5f9;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    th.sortable:hover {
+      background: #e2e8f0;
+    }
+    tbody tr {
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    tbody tr:hover {
+      background: #f8fafc;
+    }
+    tbody tr.selected {
+      background: #dbeafe;
+    }
+    tbody tr.empty-row {
+      cursor: default;
+      color: var(--muted);
+    }
+    tbody tr.empty-row td {
+      text-align: center;
+    }
+    .row-actions {
+      display: flex;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    .page-info {
+      color: var(--muted);
+      font-size: 0.875rem;
+      font-weight: 500;
     }
     .alert {
       padding: 0.75rem 1rem;
@@ -199,15 +303,15 @@
     <!-- Painel Principal Autenticado -->
     <section id="app-section" class="card hidden">
       <h2>Painel de Produtos</h2>
-      <p class="subtitle">Cadastre produtos ou informe o ID de um produto existente para editá-lo.</p>
+      <p class="subtitle">Cadastre produtos, selecione um item na tabela para editar ou excluir e navegue pelas páginas.</p>
       <div id="modules-container">
         <div id="product-message" class="alert" role="status" aria-live="polite"></div>
         <form id="product-form" novalidate>
           <div class="form-group">
-            <label for="product-id">ID do produto para edição</label>
+            <label for="product-id">ID do produto para edição/exclusão</label>
             <input id="product-id" name="product-id" type="number" min="1" step="1" placeholder="Deixe vazio para cadastrar" />
           </div>
-          <p class="form-note">Para editar, informe um ID existente. O ID retornado ao cadastrar também pode ser usado aqui.</p>
+          <p class="form-note">Para editar ou excluir, selecione uma linha na tabela ou informe um ID existente.</p>
           <div class="form-group">
             <label for="product-name">Nome *</label>
             <input id="product-name" name="name" type="text" required minlength="2" maxlength="120" />
@@ -238,8 +342,60 @@
           <div class="form-actions">
             <button type="submit" value="create">Cadastrar produto</button>
             <button type="submit" value="update" class="secondary">Atualizar produto</button>
+            <button type="button" id="delete-product-btn" class="danger">Excluir selecionado</button>
+            <button type="button" id="clear-form-btn" class="secondary">Limpar</button>
           </div>
         </form>
+
+        <div class="table-section">
+          <div class="toolbar">
+            <div>
+              <h3>Produtos Cadastrados</h3>
+              <p class="form-note" style="margin-bottom: 0;">Clique em uma linha para carregar os dados no formulário.</p>
+            </div>
+            <div class="sort-controls">
+              <div class="form-group">
+                <label for="sort-by">Ordenar por</label>
+                <select id="sort-by" name="sort_by">
+                  <option value="id">ID</option>
+                  <option value="name">Nome</option>
+                  <option value="category">Categoria</option>
+                  <option value="price">Preço</option>
+                  <option value="stock">Estoque</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="sort-order">Direção</label>
+                <select id="sort-order" name="order">
+                  <option value="asc">Crescente (ASC)</option>
+                  <option value="desc">Decrescente (DESC)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table id="products-table">
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort="id">ID <span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="name">Nome <span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="category">Categoria <span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="price">Preço <span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="stock">Estoque <span class="sort-indicator"></span></th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="products-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <button id="prev-page-btn" type="button" class="secondary">Anterior</button>
+            <span id="page-info" class="page-info">Página 1 de 1 (Total: 0)</span>
+            <button id="next-page-btn" type="button" class="secondary">Próxima</button>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -247,6 +403,14 @@
   <script>
     const TOKEN_KEY = "loja_web_token";
     const USER_KEY = "loja_web_user";
+    const PAGE_SIZE = 5;
+
+    let currentPage = 1;
+    let totalPages = 1;
+    let sortBy = "id";
+    let sortOrder = "asc";
+    let selectedProductId = null;
+    let currentItems = [];
 
     const healthBadge = document.getElementById("health-badge");
     const loginSection = document.getElementById("login-section");
@@ -257,6 +421,16 @@
     const productMessage = document.getElementById("product-message");
     const userInfo = document.getElementById("user-info");
     const logoutBtn = document.getElementById("logout-btn");
+    const sortBySelect = document.getElementById("sort-by");
+    const sortOrderSelect = document.getElementById("sort-order");
+    const productsTable = document.getElementById("products-table");
+    const productsTbody = document.getElementById("products-tbody");
+    const prevPageBtn = document.getElementById("prev-page-btn");
+    const nextPageBtn = document.getElementById("next-page-btn");
+    const pageInfo = document.getElementById("page-info");
+    const deleteProductBtn = document.getElementById("delete-product-btn");
+    const clearFormBtn = document.getElementById("clear-form-btn");
+    const sortableHeaders = productsTable.querySelectorAll("th.sortable");
 
     async function checkHealth() {
       try {
@@ -274,6 +448,22 @@
       }
     }
 
+    function resetAppState() {
+      currentPage = 1;
+      totalPages = 1;
+      sortBy = "id";
+      sortOrder = "asc";
+      selectedProductId = null;
+      currentItems = [];
+      productForm.reset();
+      productMessage.className = "alert";
+      productMessage.textContent = "";
+      productsTbody.innerHTML = "";
+      pageInfo.textContent = "Página 1 de 1 (Total: 0)";
+      prevPageBtn.disabled = true;
+      nextPageBtn.disabled = true;
+    }
+
     function updateAuthUI() {
       const token = sessionStorage.getItem(TOKEN_KEY);
       const username = sessionStorage.getItem(USER_KEY);
@@ -283,11 +473,13 @@
         userInfo.textContent = `Olá, ${username}`;
         userInfo.classList.remove("hidden");
         logoutBtn.classList.remove("hidden");
+        loadProducts();
       } else {
         loginSection.classList.remove("hidden");
         appSection.classList.add("hidden");
         userInfo.classList.add("hidden");
         logoutBtn.classList.add("hidden");
+        resetAppState();
       }
     }
 
@@ -334,6 +526,263 @@
       productMessage.className = isError ? "alert error" : "alert success";
     }
 
+    function fillProductForm(product) {
+      selectedProductId = product.id;
+      document.getElementById("product-id").value = product.id;
+      document.getElementById("product-name").value = product.name;
+      document.getElementById("product-category").value = product.category;
+      document.getElementById("product-price").value = product.price;
+      document.getElementById("product-stock").value = product.stock;
+      document.getElementById("product-description").value = product.description || "";
+    }
+
+    function clearProductForm() {
+      selectedProductId = null;
+      productForm.reset();
+      updateSelectedRowHighlight();
+    }
+
+    function updateSelectedRowHighlight() {
+      const rows = productsTbody.querySelectorAll("tr[data-product-id]");
+      rows.forEach((row) => {
+        row.classList.toggle("selected", Number(row.dataset.productId) === selectedProductId);
+      });
+    }
+
+    function selectProduct(product) {
+      fillProductForm(product);
+      updateSelectedRowHighlight();
+    }
+
+    function updateSortUI() {
+      sortBySelect.value = sortBy;
+      sortOrderSelect.value = sortOrder;
+      sortableHeaders.forEach((th) => {
+        const indicator = th.querySelector(".sort-indicator");
+        if (th.dataset.sort === sortBy) {
+          indicator.textContent = sortOrder === "asc" ? "▲" : "▼";
+        } else {
+          indicator.textContent = "";
+        }
+      });
+    }
+
+    function renderProducts(items, total) {
+      productsTbody.innerHTML = "";
+      totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      pageInfo.textContent = `Página ${currentPage} de ${totalPages} (Total: ${total})`;
+      prevPageBtn.disabled = currentPage <= 1;
+      nextPageBtn.disabled = currentPage >= totalPages;
+
+      if (items.length === 0) {
+        const emptyRow = document.createElement("tr");
+        emptyRow.className = "empty-row";
+        const emptyCell = document.createElement("td");
+        emptyCell.colSpan = 6;
+        emptyCell.textContent = "Nenhum produto cadastrado.";
+        emptyRow.appendChild(emptyCell);
+        productsTbody.appendChild(emptyRow);
+        return;
+      }
+
+      items.forEach((product) => {
+        const tr = document.createElement("tr");
+        tr.dataset.productId = String(product.id);
+        if (product.id === selectedProductId) {
+          tr.classList.add("selected");
+        }
+        tr.addEventListener("click", () => selectProduct(product));
+
+        const idCell = document.createElement("td");
+        idCell.textContent = String(product.id);
+
+        const nameCell = document.createElement("td");
+        nameCell.textContent = product.name;
+        if (product.description) {
+          tr.title = product.description;
+        }
+
+        const categoryCell = document.createElement("td");
+        categoryCell.textContent = product.category;
+
+        const priceCell = document.createElement("td");
+        priceCell.textContent = `R$ ${Number(product.price).toFixed(2)}`;
+
+        const stockCell = document.createElement("td");
+        stockCell.textContent = String(product.stock);
+
+        const actionsCell = document.createElement("td");
+        const actionsWrap = document.createElement("div");
+        actionsWrap.className = "row-actions";
+
+        const selectBtn = document.createElement("button");
+        selectBtn.type = "button";
+        selectBtn.className = "secondary btn-sm";
+        selectBtn.textContent = "Selecionar";
+        selectBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectProduct(product);
+        });
+
+        actionsWrap.appendChild(selectBtn);
+        actionsCell.appendChild(actionsWrap);
+
+        tr.appendChild(idCell);
+        tr.appendChild(nameCell);
+        tr.appendChild(categoryCell);
+        tr.appendChild(priceCell);
+        tr.appendChild(stockCell);
+        tr.appendChild(actionsCell);
+        productsTbody.appendChild(tr);
+      });
+    }
+
+    function handleUnauthorized() {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(USER_KEY);
+      updateAuthUI();
+      loginError.textContent = "Sessão expirada ou inválida. Faça login novamente.";
+      loginError.className = "alert error";
+    }
+
+    async function loadProducts() {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (!token) {
+        return;
+      }
+
+      updateSortUI();
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        page_size: String(PAGE_SIZE),
+        sort_by: sortBy,
+        order: sortOrder,
+      });
+
+      try {
+        const res = await fetch(`/api/web/records?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok) {
+          showProductMessage("Não foi possível carregar os produtos.", true);
+          return;
+        }
+
+        if (data.items.length === 0 && data.total > 0 && currentPage > 1) {
+          currentPage = Math.ceil(data.total / PAGE_SIZE);
+          await loadProducts();
+          return;
+        }
+
+        currentItems = data.items;
+        renderProducts(data.items, data.total);
+      } catch (_err) {
+        showProductMessage("Erro de conexão ao listar os produtos.", true);
+      }
+    }
+
+    async function deleteProduct(productId) {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (!token) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/web/records/${encodeURIComponent(productId)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok) {
+          const detail = typeof data.detail === "string" ? data.detail : "Erro ao excluir.";
+          showProductMessage(`Não foi possível excluir o produto: ${detail}`, true);
+          if (res.status === 404) {
+            await loadProducts();
+          }
+          return;
+        }
+
+        const currentFormId = Number(document.getElementById("product-id").value);
+        if (currentFormId === productId || selectedProductId === productId) {
+          clearProductForm();
+        }
+        showProductMessage(`Produto ${productId} excluído com sucesso.`);
+
+        const remainingOnPage = currentItems.filter((item) => item.id !== productId).length;
+        if (remainingOnPage === 0 && currentPage > 1) {
+          currentPage -= 1;
+        }
+        await loadProducts();
+      } catch (_err) {
+        showProductMessage("Erro de conexão ao excluir o produto.", true);
+      }
+    }
+
+    sortBySelect.addEventListener("change", () => {
+      sortBy = sortBySelect.value;
+      currentPage = 1;
+      loadProducts();
+    });
+
+    sortOrderSelect.addEventListener("change", () => {
+      sortOrder = sortOrderSelect.value;
+      currentPage = 1;
+      loadProducts();
+    });
+
+    sortableHeaders.forEach((th) => {
+      th.addEventListener("click", () => {
+        const column = th.dataset.sort;
+        if (sortBy === column) {
+          sortOrder = sortOrder === "asc" ? "desc" : "asc";
+        } else {
+          sortBy = column;
+          sortOrder = "asc";
+        }
+        currentPage = 1;
+        loadProducts();
+      });
+    });
+
+    prevPageBtn.addEventListener("click", () => {
+      if (currentPage > 1) {
+        currentPage -= 1;
+        loadProducts();
+      }
+    });
+
+    nextPageBtn.addEventListener("click", () => {
+      if (currentPage < totalPages) {
+        currentPage += 1;
+        loadProducts();
+      }
+    });
+
+    deleteProductBtn.addEventListener("click", () => {
+      const productId = document.getElementById("product-id").value;
+      const parsedProductId = Number(productId);
+      if (!productId || !Number.isInteger(parsedProductId) || parsedProductId < 1) {
+        showProductMessage("Informe ou selecione um produto válido para excluir.", true);
+        return;
+      }
+      deleteProduct(parsedProductId);
+    });
+
+    clearFormBtn.addEventListener("click", () => {
+      clearProductForm();
+      productMessage.className = "alert";
+      productMessage.textContent = "";
+    });
+
     productForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const action = event.submitter ? event.submitter.value : "create";
@@ -371,6 +820,10 @@
           },
           body: JSON.stringify(payload),
         });
+        if (res.status === 401) {
+          handleUnauthorized();
+          return;
+        }
         const data = await res.json();
         if (!res.ok) {
           const detail = typeof data.detail === "string" ? data.detail : "Confira os dados informados.";
@@ -379,17 +832,13 @@
         }
 
         const product = data.product;
-        document.getElementById("product-id").value = product.id;
-        document.getElementById("product-name").value = product.name;
-        document.getElementById("product-category").value = product.category;
-        document.getElementById("product-price").value = product.price;
-        document.getElementById("product-stock").value = product.stock;
-        document.getElementById("product-description").value = product.description;
+        fillProductForm(product);
         showProductMessage(
           action === "create"
             ? `Produto cadastrado com sucesso. ID: ${product.id}.`
             : `Produto ${product.id} atualizado com sucesso.`,
         );
+        await loadProducts();
       } catch (_err) {
         showProductMessage("Erro de conexão ao salvar o produto.", true);
       }

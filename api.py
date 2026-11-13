@@ -9,13 +9,17 @@ from pathlib import Path
 from typing import Literal
 import uuid
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, StrictInt, field_validator
 
 import db
+
+
+SortField = Literal["id", "name", "category", "price", "stock"]
+SortOrder = Literal["asc", "desc"]
 
 
 class LoginPayload(BaseModel):
@@ -250,3 +254,67 @@ def web_update_product(
         message="Produto atualizado",
     )
     return {"status": "ok", "product": product}
+
+
+@app.get("/api/web/records")
+def web_list_products(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5, ge=5, le=5),
+    sort_by: SortField = Query(default="id"),
+    order: SortOrder = Query(default="asc"),
+    authorization: str | None = Header(default=None),
+):
+    req_id = new_request_id()
+    verify_web_token(authorization, request_id=req_id)
+    result = db.web_list_products(
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        order=order,
+        request_id=req_id,
+    )
+    log_api(
+        client="web",
+        operation="list",
+        status="success",
+        request_id=req_id,
+        message="Produtos listados",
+    )
+    return {
+        "status": "ok",
+        "items": result["items"],
+        "total": result["total"],
+        "page": page,
+        "page_size": page_size,
+        "sort_by": sort_by,
+        "order": order,
+    }
+
+
+@app.delete("/api/web/records/{product_id}")
+def web_delete_product(
+    product_id: int,
+    authorization: str | None = Header(default=None),
+):
+    req_id = new_request_id()
+    verify_web_token(authorization, request_id=req_id)
+    deleted = db.web_delete_product(product_id=product_id, request_id=req_id)
+    if not deleted:
+        log_api(
+            client="web",
+            operation="delete",
+            status="error",
+            request_id=req_id,
+            message="Produto nao encontrado",
+            level="WARN",
+        )
+        raise HTTPException(status_code=404, detail="Produto nao encontrado")
+
+    log_api(
+        client="web",
+        operation="delete",
+        status="success",
+        request_id=req_id,
+        message="Produto removido",
+    )
+    return {"status": "ok", "deleted_id": product_id}
