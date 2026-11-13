@@ -65,3 +65,23 @@ Os testes unitários e a medição de cobertura de linhas rodam dentro do contê
 ```bash
 docker compose run --rm api pytest --cov=api --cov=db --cov-report=term-missing --cov-fail-under=100
 ```
+
+---
+
+## Issue #2 — Cadastro e Edição Web de Produtos
+
+Após entrar na Web, use o formulário **Painel de Produtos** para cadastrar um produto ou editar um produto existente. Nome, categoria, preço e estoque são obrigatórios; a descrição é opcional. Para editar, informe o ID do produto no campo correspondente. Após salvar, o ID e os dados retornados pela API ficam preenchidos no formulário.
+
+Categorias aceitas: `Eletronicos`, `Perifericos`, `Moveis`, `Vestuario` e `Outros`. O nome deve ter pelo menos 2 caracteres, o preço deve ser maior que zero e o estoque deve ser um inteiro não negativo. A API valida os mesmos campos, exige o token obtido no login Web e retorna HTTP 404 quando o ID de edição não existe.
+
+As operações usam `POST /api/web/records` para cadastro e `PUT /api/web/records/{id}` para edição. Cada requisição emite logs JSON correlacionados na API e no banco; consulte-os com:
+
+```bash
+docker compose logs -f api
+```
+
+Os testes da entrega continuam usando a cobertura integral de `api.py` e `db.py`:
+
+```bash
+docker compose run --rm api pytest --cov=api --cov=db --cov-report=term-missing --cov-fail-under=100
+```
